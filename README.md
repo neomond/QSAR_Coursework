@@ -161,8 +161,8 @@ python main_run.py
 All figures will be saved to /mnt/user-data/outputs/ and match those in the report.
 
 ## Contact
-Nazrin Atayeva
-natayeva1@sheffield.ac.uk
+[Nazrin Atayeva]
+[natayeva1@sheffield.ac.uk]
 University of Sheffield
 Department of Automatic Control and Systems Engineering
 
