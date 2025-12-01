@@ -1,4 +1,4 @@
-# QSAR Biodegradability Prediction - Coursework Submission
+# QSAR Biodegradability Prediction
 
 ## Overview
 This coursework implements a comprehensive machine learning pipeline for predicting chemical biodegradability from QSAR (Quantitative Structure-Activity Relationship) features.
