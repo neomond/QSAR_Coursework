@@ -2,8 +2,13 @@
 Utility Functions for QSAR Biodegradability Prediction
 ========================================================
 
-This module contains helper functions for data processing, visualization,
-and custom machine learning implementations.
+This module contains all the helper functions I need for:
+- Processing and cleaning data
+- Creating visualizations
+- My custom weighted ensemble classifier
+
+Author: Nazrin Atayeva
+Date: 1 December 2025
 """
 
 import numpy as np
@@ -14,7 +19,7 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import confusion_matrix, roc_curve, auc
 from matplotlib.patches import Rectangle
 
-# Set plotting style
+# Make the plots look nice
 plt.style.use('seaborn-v0_8-darkgrid')
 sns.set_palette("husl")
 
@@ -24,46 +29,55 @@ sns.set_palette("husl")
 
 def detect_outliers_iqr(X, threshold=1.5):
     """
-    Detect outliers using the IQR (Interquartile Range) method.
+    Find outliers using the IQR method (Interquartile Range).
+    
+    This is basically the same method you'd use with a box plot - anything
+    outside 1.5 times the IQR from the quartiles is considered an outlier.
     
     Parameters:
     -----------
     X : array-like, shape (n_samples, n_features)
-        Input data
+        The data to check
     threshold : float, default=1.5
-        Multiplier for IQR to define outlier boundaries
+        How many IQRs away from the quartiles to consider an outlier
         
     Returns:
     --------
     outlier_mask : array-like, shape (n_samples,)
-        Boolean mask indicating outlier samples
+        True/False for each sample - True means it's an outlier
     """
+    # Calculate the quartiles
     Q1 = np.percentile(X, 25, axis=0)
     Q3 = np.percentile(X, 75, axis=0)
     IQR = Q3 - Q1
     
+    # Define the boundaries
     lower_bound = Q1 - threshold * IQR
     upper_bound = Q3 + threshold * IQR
     
+    # Check which samples fall outside these bounds
     outliers = np.any((X < lower_bound) | (X > upper_bound), axis=1)
     return outliers
 
 
 def calculate_feature_stats(X, y):
     """
-    Calculate statistical measures for each feature separated by class.
+    Calculate some basic statistics for each feature, split by class.
+    
+    Useful for understanding how the features differ between biodegradable
+    and non-biodegradable chemicals.
     
     Parameters:
     -----------
     X : array-like, shape (n_samples, n_features)
-        Input features
+        The feature data
     y : array-like, shape (n_samples,)
-        Target labels
+        The labels (0 or 1)
         
     Returns:
     --------
     stats : dict
-        Dictionary containing statistics for each class
+        Statistics organized by class
     """
     stats = {
         'class_0': {
@@ -86,30 +100,34 @@ def calculate_feature_stats(X, y):
 
 def plot_feature_distributions(X, y, output_dir, n_features=10):
     """
-    Plot distributions of top features with highest variance.
+    Create histograms showing how features differ between classes.
+    
+    I'm picking the features with the highest variance since those are
+    usually the most interesting ones.
     
     Parameters:
     -----------
     X : array-like, shape (n_samples, n_features)
-        Input features
+        Feature data
     y : array-like, shape (n_samples,)
-        Target labels
+        Labels
     output_dir : str
-        Directory to save the plot
+        Where to save the figure
     n_features : int, default=10
-        Number of features to plot
+        How many features to plot
     """
-    # Select features with highest variance
+    # Pick the most variable features
     variances = np.var(X, axis=0)
     top_indices = np.argsort(variances)[::-1][:n_features]
     
+    # Set up the plot grid
     fig, axes = plt.subplots(2, 5, figsize=(20, 8))
     axes = axes.flatten()
     
     for i, feat_idx in enumerate(top_indices):
         ax = axes[i]
         
-        # Plot histograms for each class
+        # Plot overlapping histograms for both classes
         ax.hist(X[y == 0, feat_idx], bins=30, alpha=0.6, label='Non-biodegradable', 
                 color='coral', density=True)
         ax.hist(X[y == 1, feat_idx], bins=30, alpha=0.6, label='Biodegradable', 
@@ -128,34 +146,36 @@ def plot_feature_distributions(X, y, output_dir, n_features=10):
 
 def plot_correlation_matrix(X, output_dir, n_features=20):
     """
-    Plot correlation matrix for top features.
+    Show how features correlate with each other.
+    
+    High correlation between features might mean we have redundant information.
     
     Parameters:
     -----------
     X : array-like, shape (n_samples, n_features)
-        Input features
+        Feature data
     output_dir : str
-        Directory to save the plot
+        Where to save the figure
     n_features : int, default=20
-        Number of features to include
+        How many features to include
     """
-    # Select features with highest variance
+    # Again, focus on the most variable features
     variances = np.var(X, axis=0)
     top_indices = np.argsort(variances)[::-1][:n_features]
     X_subset = X[:, top_indices]
     
-    # Calculate correlation matrix
+    # Calculate correlations
     corr_matrix = np.corrcoef(X_subset.T)
     
-    # Plot
+    # Create the heatmap
     fig, ax = plt.subplots(figsize=(12, 10))
     im = ax.imshow(corr_matrix, cmap='coolwarm', vmin=-1, vmax=1, aspect='auto')
     
-    # Add colorbar
+    # Add a colorbar
     cbar = plt.colorbar(im, ax=ax)
     cbar.set_label('Correlation', rotation=270, labelpad=20, fontsize=12)
     
-    # Set ticks and labels
+    # Label the axes
     ax.set_xticks(range(len(top_indices)))
     ax.set_yticks(range(len(top_indices)))
     ax.set_xticklabels([f'F{i}' for i in top_indices], rotation=45, ha='right')
@@ -170,22 +190,26 @@ def plot_correlation_matrix(X, output_dir, n_features=20):
 
 def plot_pca_analysis(pca, X_pca, y, output_dir):
     """
-    Plot PCA analysis including variance explained and 2D projection.
+    Visualize PCA results in three ways.
+    
+    Shows: (1) how much variance each component explains,
+           (2) 2D projection of the data,
+           (3) 3D projection for a better view
     
     Parameters:
     -----------
     pca : PCA object
-        Fitted PCA object
+        The fitted PCA model
     X_pca : array-like
-        Transformed data
+        Transformed data (PCA components)
     y : array-like
-        Target labels
+        Labels for coloring points
     output_dir : str
-        Directory to save the plot
+        Where to save the figure
     """
     fig = plt.figure(figsize=(16, 6))
     
-    # Plot 1: Explained variance
+    # Left plot: How much variance do we capture?
     ax1 = plt.subplot(131)
     explained_var = pca.explained_variance_ratio_
     cumulative_var = np.cumsum(explained_var)
@@ -200,7 +224,7 @@ def plot_pca_analysis(pca, X_pca, y, output_dir):
     ax1.legend()
     ax1.grid(True, alpha=0.3)
     
-    # Plot 2: 2D PCA projection
+    # Middle plot: 2D view of the data
     ax2 = plt.subplot(132)
     scatter1 = ax2.scatter(X_pca[y == 0, 0], X_pca[y == 0, 1], 
                           c='coral', alpha=0.6, s=30, label='Non-biodegradable')
@@ -212,7 +236,7 @@ def plot_pca_analysis(pca, X_pca, y, output_dir):
     ax2.legend()
     ax2.grid(True, alpha=0.3)
     
-    # Plot 3: 3D PCA projection
+    # Right plot: 3D view for more perspective
     ax3 = plt.subplot(133, projection='3d')
     ax3.scatter(X_pca[y == 0, 0], X_pca[y == 0, 1], X_pca[y == 0, 2],
                c='coral', alpha=0.6, s=20, label='Non-biodegradable')
@@ -231,14 +255,17 @@ def plot_pca_analysis(pca, X_pca, y, output_dir):
 
 def plot_model_comparison(results, output_dir):
     """
-    Plot comparison of model performance metrics.
+    Compare all models side by side.
+    
+    Creates two plots: one showing train/test/CV accuracy for all models,
+    and another showing cross-validation scores with error bars.
     
     Parameters:
     -----------
     results : dict
-        Dictionary containing model results
+        Dictionary with all model results
     output_dir : str
-        Directory to save the plot
+        Where to save the figure
     """
     models = list(results.keys())
     train_acc = [results[m]['train_acc'] for m in models]
@@ -248,7 +275,7 @@ def plot_model_comparison(results, output_dir):
     
     fig, axes = plt.subplots(1, 2, figsize=(16, 6))
     
-    # Plot 1: Accuracy comparison
+    # Left plot: Bar chart comparing all metrics
     ax1 = axes[0]
     x = np.arange(len(models))
     width = 0.25
@@ -265,7 +292,7 @@ def plot_model_comparison(results, output_dir):
     ax1.grid(True, alpha=0.3, axis='y')
     ax1.set_ylim([0.7, 1.0])
     
-    # Plot 2: CV scores with error bars
+    # Right plot: CV scores with error bars (shows stability)
     ax2 = axes[1]
     ax2.errorbar(x, cv_mean, yerr=cv_std, fmt='o-', markersize=8, 
                 linewidth=2, capsize=5, capthick=2)
@@ -276,7 +303,7 @@ def plot_model_comparison(results, output_dir):
     ax2.grid(True, alpha=0.3)
     ax2.set_ylim([0.7, 1.0])
     
-    # Add horizontal line for best performance
+    # Mark the best performer
     best_cv = max(cv_mean)
     ax2.axhline(y=best_cv, color='r', linestyle='--', alpha=0.5, 
                label=f'Best: {best_cv:.4f}')
@@ -289,24 +316,28 @@ def plot_model_comparison(results, output_dir):
 
 def plot_confusion_matrices(results, y_test, output_dir, models_subset=None):
     """
-    Plot confusion matrices for all models.
+    Show confusion matrices for all models in a grid.
+    
+    Makes it easy to see where each model makes mistakes.
     
     Parameters:
     -----------
     results : dict
-        Dictionary containing model results
+        Dictionary with all model results
     y_test : array-like
-        True labels
+        True labels for the test set
     output_dir : str
-        Directory to save the plot
+        Where to save the figure
     models_subset : list, optional
-        Subset of models to plot
+        If you only want to plot specific models
     """
+    # Use all models unless specified otherwise
     if models_subset is None:
         models = list(results.keys())
     else:
         models = models_subset
     
+    # Figure out grid size
     n_models = len(models)
     n_cols = 3
     n_rows = (n_models + n_cols - 1) // n_cols
@@ -319,10 +350,10 @@ def plot_confusion_matrices(results, y_test, output_dir, models_subset=None):
         y_pred = results[model_name]['y_pred_test']
         cm = confusion_matrix(y_test, y_pred)
         
-        # Normalize confusion matrix
+        # Normalize to get percentages
         cm_norm = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
         
-        # Plot
+        # Draw the heatmap
         im = ax.imshow(cm_norm, cmap='Blues', vmin=0, vmax=1)
         ax.set_xticks([0, 1])
         ax.set_yticks([0, 1])
@@ -333,7 +364,7 @@ def plot_confusion_matrices(results, y_test, output_dir, models_subset=None):
         ax.set_title(f'{model_name}\nAcc: {results[model_name]["test_acc"]:.4f}', 
                     fontsize=11)
         
-        # Add text annotations
+        # Add the actual numbers
         for i in range(2):
             for j in range(2):
                 text = ax.text(j, i, f'{cm[i, j]}\n({cm_norm[i, j]:.2f})',
@@ -341,7 +372,7 @@ def plot_confusion_matrices(results, y_test, output_dir, models_subset=None):
         
         plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
     
-    # Hide empty subplots
+    # Clean up any empty subplots
     for idx in range(n_models, len(axes)):
         axes[idx].axis('off')
     
@@ -352,22 +383,27 @@ def plot_confusion_matrices(results, y_test, output_dir, models_subset=None):
 
 def plot_roc_curves(results, y_test, output_dir):
     """
-    Plot ROC curves for all models with probability predictions.
+    Plot ROC curves for all models that can output probabilities.
+    
+    ROC curves show the trade-off between true positive rate and false
+    positive rate. Higher AUC = better discrimination.
     
     Parameters:
     -----------
     results : dict
-        Dictionary containing model results
+        Dictionary with all model results
     y_test : array-like
         True labels
     output_dir : str
-        Directory to save the plot
+        Where to save the figure
     """
     fig, ax = plt.subplots(figsize=(10, 8))
     
+    # Use different colors for each model
     colors = plt.cm.Set3(np.linspace(0, 1, len(results)))
     
     for idx, (model_name, res) in enumerate(results.items()):
+        # Only plot if the model gives us probabilities
         if 'y_proba_test' in res:
             y_proba = res['y_proba_test']
             fpr, tpr, _ = roc_curve(y_test, y_proba)
@@ -376,7 +412,7 @@ def plot_roc_curves(results, y_test, output_dir):
             ax.plot(fpr, tpr, lw=2, color=colors[idx],
                    label=f'{model_name} (AUC = {roc_auc:.4f})')
     
-    # Plot random classifier line
+    # Add the diagonal line (random guessing baseline)
     ax.plot([0, 1], [0, 1], 'k--', lw=2, label='Random Classifier')
     
     ax.set_xlim([0.0, 1.0])
@@ -394,28 +430,29 @@ def plot_roc_curves(results, y_test, output_dir):
 
 def plot_feature_importance(importance, output_dir, n_features=20):
     """
-    Plot feature importance scores.
+    Show which features are most important for the model's decisions.
     
     Parameters:
     -----------
     importance : array-like
-        Feature importance scores
+        Feature importance scores from the model
     output_dir : str
-        Directory to save the plot
+        Where to save the figure
     n_features : int, default=20
-        Number of top features to plot
+        How many top features to show
     """
-    # Get top features
+    # Get the most important features
     indices = np.argsort(importance)[::-1][:n_features]
     top_importance = importance[indices]
     
     fig, ax = plt.subplots(figsize=(10, 8))
     
+    # Horizontal bar chart (easier to read feature names)
     y_pos = np.arange(n_features)
     ax.barh(y_pos, top_importance, align='center', color='steelblue', alpha=0.8)
     ax.set_yticks(y_pos)
     ax.set_yticklabels([f'Feature {i}' for i in indices])
-    ax.invert_yaxis()
+    ax.invert_yaxis()  # Highest importance at top
     ax.set_xlabel('Importance Score', fontsize=12)
     ax.set_title(f'Top {n_features} Most Important Features', fontsize=14)
     ax.grid(True, alpha=0.3, axis='x')
@@ -426,23 +463,31 @@ def plot_feature_importance(importance, output_dir, n_features=20):
 
 
 # ============================================================================
-# CUSTOM MACHINE LEARNING MODELS
+# MY CUSTOM WEIGHTED ENSEMBLE
 # ============================================================================
 
 class WeightedEnsembleClassifier(BaseEstimator, ClassifierMixin):
     """
-    Custom Weighted Ensemble Classifier
+    My Custom Weighted Ensemble Classifier
     
-    This ensemble combines predictions from multiple base classifiers using
-    learned weights. The weights are optimized using logistic regression
-    on the base classifier predictions.
+    This is the novel part of my project! Instead of just averaging predictions
+    or using simple voting, this ensemble learns optimal weights for combining
+    different models.
     
-    This is a novel approach that goes beyond simple voting or averaging.
+    How it works:
+    1. Train multiple base models
+    2. Get their predictions on the training set
+    3. Train a logistic regression "meta-learner" that figures out how to
+       best combine these predictions
+    4. The meta-learner's coefficients become the combination weights
+    
+    This way, the ensemble automatically learns to trust better-performing
+    models more, without me having to manually tune the weights.
     
     Parameters:
     -----------
     base_classifiers : list
-        List of base classifier objects (will be cloned and fitted)
+        List of sklearn classifier objects to combine
     """
     
     def __init__(self, base_classifiers):
@@ -453,105 +498,113 @@ class WeightedEnsembleClassifier(BaseEstimator, ClassifierMixin):
     
     def fit(self, X, y):
         """
-        Fit the base classifiers and meta-learner.
+        Train the ensemble.
+        
+        This fits all the base classifiers, then trains the meta-learner
+        to combine their predictions optimally.
         
         Parameters:
         -----------
         X : array-like, shape (n_samples, n_features)
-            Training data
+            Training features
         y : array-like, shape (n_samples,)
-            Target values
+            Training labels
             
         Returns:
         --------
         self : object
+            Returns itself (sklearn convention)
         """
         from sklearn.base import clone
         
-        # Clone and fit base classifiers
+        # Train all the base models (using fresh copies)
         self.fitted_classifiers = []
         for clf in self.base_classifiers:
             cloned_clf = clone(clf)
             cloned_clf.fit(X, y)
             self.fitted_classifiers.append(cloned_clf)
         
-        # Get predictions from base classifiers
+        # Get their predictions on the training data
         base_predictions = self._get_base_predictions(X)
         
-        # Fit meta-learner
+        # Train the meta-learner to combine these predictions
         self.meta_learner.fit(base_predictions, y)
         
-        # Extract weights (coefficients of logistic regression)
+        # Extract the learned weights from the logistic regression coefficients
         self.weights = np.abs(self.meta_learner.coef_[0])
-        self.weights = self.weights / np.sum(self.weights)  # Normalize
+        self.weights = self.weights / np.sum(self.weights)  # Normalize to sum to 1
         
         return self
     
     def predict(self, X):
         """
-        Predict class labels.
+        Make predictions using the ensemble.
         
         Parameters:
         -----------
         X : array-like, shape (n_samples, n_features)
-            Test data
+            Test features
             
         Returns:
         --------
         y_pred : array-like, shape (n_samples,)
             Predicted class labels
         """
-        # Get predictions from base classifiers
+        # Get predictions from all base models
         base_predictions = self._get_base_predictions(X)
         
-        # Use meta-learner for final prediction
+        # Let the meta-learner make the final decision
         return self.meta_learner.predict(base_predictions)
     
     def predict_proba(self, X):
         """
-        Predict class probabilities.
+        Get probability estimates from the ensemble.
         
         Parameters:
         -----------
         X : array-like, shape (n_samples, n_features)
-            Test data
+            Test features
             
         Returns:
         --------
         y_proba : array-like, shape (n_samples, n_classes)
-            Predicted class probabilities
+            Predicted probabilities for each class
         """
-        # Get predictions from base classifiers
+        # Get predictions from all base models
         base_predictions = self._get_base_predictions(X)
         
-        # Use meta-learner for final probability prediction
+        # Meta-learner gives us the combined probabilities
         return self.meta_learner.predict_proba(base_predictions)
     
     def _get_base_predictions(self, X):
         """
-        Get predictions from all fitted base classifiers.
+        Helper function to get predictions from all base classifiers.
+        
+        If a model can give probabilities, we use those (more informative).
+        Otherwise, we use its binary predictions.
         
         Parameters:
         -----------
         X : array-like, shape (n_samples, n_features)
-            Input data
+            Input features
             
         Returns:
         --------
         predictions : array-like, shape (n_samples, n_base_classifiers)
-            Predictions from base classifiers
+            Matrix where each column is one model's predictions
         """
         if self.fitted_classifiers is None:
-            raise ValueError("Ensemble not fitted yet")
+            raise ValueError("Need to fit the ensemble first!")
             
         predictions = []
         for clf in self.fitted_classifiers:
             if hasattr(clf, 'predict_proba'):
-                # Use probability of positive class
+                # Use probability of positive class (more informative)
                 pred = clf.predict_proba(X)[:, 1]
             else:
-                # Use binary predictions
+                # Fall back to binary predictions
                 pred = clf.predict(X)
             predictions.append(pred)
         
+        # Stack them as columns
         return np.column_stack(predictions)
